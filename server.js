@@ -69,7 +69,33 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
 
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff') }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Fichiers du site : dans public/ (recommandé), ou à défaut à côté de server.js
+const PUBLIC_DIR = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_DIR));
+
+const findSiteFile = (name) =>
+  [path.join(PUBLIC_DIR, name), path.join(__dirname, name)].find((p) => fs.existsSync(p));
+
+['index.html', 'style.css', 'script.js'].forEach((name) => {
+  const routes = name === 'index.html' ? ['/', '/index.html'] : ['/' + name];
+  app.get(routes, (req, res, next) => {
+    const file = findSiteFile(name);
+    if (file) return res.sendFile(file);
+    if (name !== 'index.html') return next();
+    res.status(500).type('html').send(`<!doctype html><meta charset="utf-8">
+      <body style="font-family:system-ui;max-width:640px;margin:60px auto;padding:0 16px;line-height:1.6">
+      <h1>Tonin Event : fichiers du site introuvables</h1>
+      <p>Le serveur fonctionne, mais <code>index.html</code> est introuvable. Organise le projet ainsi :</p>
+      <pre style="background:#effcfb;padding:16px;border-radius:12px">tonin-event/
+├── server.js
+├── package.json
+└── public/
+    ├── index.html
+    ├── style.css
+    └── script.js</pre>
+      <p>Dossier cherché : <code>${PUBLIC_DIR}</code></p></body>`);
+  });
+});
 
 const publicEvent = (e, withPhotos = false) => {
   const base = {

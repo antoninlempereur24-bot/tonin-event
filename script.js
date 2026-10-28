@@ -13,6 +13,7 @@
     selected: [],        // fichiers choisis avant publication
     afterName: null,     // action à reprendre après saisie du prénom
     lightboxIndex: 0,
+    justCreated: false,  // vrai juste après la création d'un événement
     filterAuthor: null,  // clé de l'auteur dont on voit l'album
     visiblePhotos: [],   // photos actuellement affichées (filtrées ou non)
   };
@@ -130,6 +131,8 @@
   async function showHome() {
     $('eventView').hidden = true;
     $('homeView').hidden = false;
+    $('topEvent').hidden = true;
+    state.justCreated = false;
     document.title = 'Tonin Event — Photos par événement';
     state.currentEvent = null;
     $('joinErr').textContent = '';
@@ -218,10 +221,15 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, creator: state.name }),
       });
+      if (!ev || !ev.code) {
+        $('createErr').textContent = "Le serveur n'a pas renvoyé de code d'événement : il n'est pas à jour. Remplace server.js par la dernière version, puis arrête-le (Ctrl+C) et relance-le avec « npm start ».";
+        return;
+      }
       rememberCode(ev.code);
       $('createModal').hidden = true;
+      state.justCreated = true;
       toast(`Événement créé — code ${fmtCode(ev.code)} 🎉`);
-      location.hash = '#/e/' + ev.code;
+      if (location.hash === '#/e/' + ev.code) route(); else location.hash = '#/e/' + ev.code;
     } catch (err) {
       $('createErr').textContent = err.message;
     }
@@ -246,6 +254,7 @@
 
   function showInvalid(message) {
     state.currentEvent = null;
+    $('topEvent').hidden = true;
     document.querySelector('.event-banner').hidden = true;
     $('uploadForm').hidden = true;
     $('gallery').innerHTML = '';
@@ -265,6 +274,10 @@
     $('evDesc').textContent = ev.description || '';
     $('evDesc').hidden = !ev.description;
     $('evCode').textContent = fmtCode(ev.code);
+    $('teName').textContent = ev.name;
+    $('teCode').textContent = fmtCode(ev.code);
+    $('topEvent').hidden = false;
+    $('createdNote').hidden = !state.justCreated;
     $('evCreator').textContent = `Créé par ${ev.creator} · ${fmtDate(ev.createdAt)}`;
     $('evCount').textContent = '📷 ' + plural(ev.photos.length, 'photo', 'photos');
     renderGallery();
@@ -327,6 +340,10 @@
     if (b) showAlbum(b.dataset.author);
   });
   $('albumBack').addEventListener('click', () => showAlbum(null));
+
+  $('topEvent').addEventListener('click', () => {
+    if (state.currentEvent) copyText(fmtCode(state.currentEvent.code), 'Code copié ✔');
+  });
 
   $('copyCodeBtn').addEventListener('click', () => {
     if (state.currentEvent) copyText(fmtCode(state.currentEvent.code), 'Code copié ✔');

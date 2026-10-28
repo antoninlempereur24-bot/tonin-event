@@ -25,6 +25,12 @@
           <span class="brand-by">par Toni'n</span>
         </span>
       </a>
+      <!-- Rappel de l'événement ouvert (nom + code), visible sur la page d'un événement -->
+      <button id="topEvent" class="top-event" type="button" title="Copier le code" hidden>
+        <span class="te-label">Événement</span>
+        <span id="teName" class="te-name"></span>
+        <span id="teCode" class="te-code"></span>
+      </button>
       <button id="userChip" class="user-chip" type="button" title="Changer mon prénom">
         <span class="avatar" id="userAvatar">?</span>
         <span id="userName">Mon prénom</span>
@@ -81,6 +87,7 @@
           <a href="#/" class="back">← Mes événements</a>
           <h1 id="evName"></h1>
           <p id="evDesc" class="ev-desc"></p>
+          <p id="createdNote" class="created-note" hidden>🎉 Événement créé ! Donne ce code à tes invités : ils pourront rejoindre l'événement et y ajouter leurs photos.</p>
           <div class="code-box">
             <span class="code-label">Code de l'événement</span>
             <span id="evCode" class="code-value"></span>

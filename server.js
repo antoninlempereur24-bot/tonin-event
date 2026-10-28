@@ -1,5 +1,6 @@
 // Tonin Event — back-end (Express + Multer)
 // Stockage : fichier JSON (data/db.json) + photos sur disque (uploads/)
+// Les événements sont privés : on y accède uniquement avec leur code.
 
 const express = require('express');
 const multer = require('multer');
@@ -15,6 +16,22 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+/* ---------- Codes d'événement ---------- */
+// Sans caractères ambigus (0/O, 1/I/L)
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const CODE_LENGTH = 6;
+
+function randomCode() {
+  const bytes = crypto.randomBytes(CODE_LENGTH);
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return code;
+}
+
+// "k7m-2qx", " K7M 2QX " => "K7M2QX"
+const normalizeCode = (s) =>
+  String(s || '').toUpperCase().split('').filter((c) => CODE_ALPHABET.includes(c)).join('');
+
 /* ---------- Mini base de données JSON ---------- */
 let db = { events: [] };
 try {
@@ -22,10 +39,20 @@ try {
 } catch (err) {
   console.error('Impossible de lire db.json, nouvelle base créée.', err);
 }
+if (!Array.isArray(db.events)) db.events = [];
+
+function uniqueCode() {
+  let code;
+  do { code = randomCode(); } while (db.events.some((e) => e.code === code));
+  return code;
+}
+
+// Migration : les événements créés avant l'arrivée des codes en reçoivent un
+let migrated = false;
+db.events.forEach((e) => { if (!e.code) { e.code = uniqueCode(); migrated = true; } });
 
 let saveTimer = null;
 function saveDb() {
-  // Écriture groupée et atomique
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const tmp = DB_FILE + '.tmp';
@@ -35,9 +62,14 @@ function saveDb() {
     });
   }, 100);
 }
+if (migrated) saveDb();
 
 const newId = (n = 6) => crypto.randomBytes(n).toString('hex');
 const clean = (s, max) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
+const findByCode = (raw) => {
+  const code = normalizeCode(raw);
+  return code.length === CODE_LENGTH ? db.events.find((e) => e.code === code) : undefined;
+};
 
 /* ---------- Upload des photos ---------- */
 const ALLOWED = {
@@ -51,7 +83,7 @@ const ALLOWED = {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + newId(5) + ALLOWED[file.mimetype]),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + newId(8) + ALLOWED[file.mimetype]),
 });
 
 const upload = multer({
@@ -69,6 +101,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
 
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff') }));
+
 // Fichiers du site : dans public/ (recommandé), ou à défaut à côté de server.js
 const PUBLIC_DIR = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_DIR));
@@ -97,9 +130,26 @@ const findSiteFile = (name) =>
   });
 });
 
+/* ---------- Limitation des essais de codes (anti-devinette) ---------- */
+const hits = new Map(); // ip -> { count, reset }
+function limiter(max, windowMs) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip;
+    let h = hits.get(key);
+    if (!h || now > h.reset) { h = { count: 0, reset: now + windowMs }; hits.set(key, h); }
+    h.count++;
+    if (h.count > max) return res.status(429).json({ error: 'Trop d\'essais. Réessaie dans une minute.' });
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now > v.reset) hits.delete(k); }, 60000).unref();
+const codeLimiter = limiter(60, 60 * 1000);
+
 const publicEvent = (e, withPhotos = false) => {
   const base = {
     id: e.id,
+    code: e.code,
     name: e.name,
     description: e.description,
     creator: e.creator,
@@ -111,14 +161,20 @@ const publicEvent = (e, withPhotos = false) => {
   return base;
 };
 
-// Liste des événements
-app.get('/api/events', (req, res) => {
-  const list = [...db.events].reverse().map((e) => publicEvent(e));
+// "Mes événements" : le navigateur envoie les codes qu'il connaît (pas de liste publique)
+app.get('/api/events', codeLimiter, (req, res) => {
+  const codes = String(req.query.codes || '').split(',').slice(0, 50);
+  const seen = new Set();
+  const list = [];
+  for (const c of codes) {
+    const e = findByCode(c);
+    if (e && !seen.has(e.code)) { seen.add(e.code); list.push(publicEvent(e)); }
+  }
   res.json(list);
 });
 
-// Création d'un événement
-app.post('/api/events', (req, res) => {
+// Création d'un événement => génère son code
+app.post('/api/events', limiter(30, 60 * 1000), (req, res) => {
   const name = clean(req.body.name, 80);
   const description = clean(req.body.description, 500);
   const creator = clean(req.body.creator, 40);
@@ -127,6 +183,7 @@ app.post('/api/events', (req, res) => {
 
   const event = {
     id: newId(4),
+    code: uniqueCode(),
     name,
     description,
     creator,
@@ -138,17 +195,17 @@ app.post('/api/events', (req, res) => {
   res.status(201).json(publicEvent(event, true));
 });
 
-// Détail d'un événement + photos
-app.get('/api/events/:id', (req, res) => {
-  const event = db.events.find((e) => e.id === req.params.id);
-  if (!event) return res.status(404).json({ error: 'Événement introuvable.' });
+// Rejoindre / ouvrir un événement avec son code
+app.get('/api/events/:code', codeLimiter, (req, res) => {
+  const event = findByCode(req.params.code);
+  if (!event) return res.status(404).json({ error: 'Code invalide : aucun événement trouvé.' });
   res.json(publicEvent(event, true));
 });
 
-// Upload de photos dans un événement
-app.post('/api/events/:id/photos', (req, res) => {
-  const event = db.events.find((e) => e.id === req.params.id);
-  if (!event) return res.status(404).json({ error: 'Événement introuvable.' });
+// Upload de photos dans un événement (le code fait office de clé d'accès)
+app.post('/api/events/:code/photos', codeLimiter, (req, res) => {
+  const event = findByCode(req.params.code);
+  if (!event) return res.status(404).json({ error: 'Code invalide : aucun événement trouvé.' });
 
   upload.array('photos', 10)(req, res, (err) => {
     const files = req.files || [];

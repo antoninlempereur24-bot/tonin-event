@@ -39,21 +39,37 @@
         <div class="container hero-inner">
           <p class="eyebrow">Photos partagées, souvenirs réunis</p>
           <h1>Chaque événement mérite<br />son <span class="hl">album commun</span>.</h1>
-          <p class="hero-sub">Crée un événement, partage le lien, et laisse tout le monde y déposer ses photos — avec son prénom.</p>
-          <button id="heroCreate" class="btn btn-light btn-lg" type="button">+ Créer un événement</button>
+          <p class="hero-sub">Crée un événement, partage son code, et laisse tes invités y déposer leurs photos — avec leur prénom. Seuls ceux qui ont le code peuvent y accéder.</p>
+          <div class="hero-actions">
+            <button id="heroCreate" class="btn btn-light btn-lg" type="button">+ Créer un événement</button>
+            <a href="#joinCard" id="heroJoin" class="btn btn-outline-light btn-lg">J'ai un code</a>
+          </div>
         </div>
       </div>
 
       <div class="container">
+        <!-- Rejoindre avec un code -->
+        <form id="joinForm" class="join-card" novalidate>
+          <div class="join-text" id="joinCard">
+            <h2>Rejoindre un événement</h2>
+            <p class="muted">Saisis le code partagé par l'organisateur.</p>
+          </div>
+          <div class="join-fields">
+            <input id="joinInput" class="code-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="7" placeholder="K7M-2QX" aria-label="Code de l'événement" />
+            <button class="btn btn-primary" type="submit">Rejoindre</button>
+          </div>
+          <p id="joinErr" class="msg msg-err join-err" role="alert"></p>
+        </form>
+
         <div class="section-head">
-          <h2>Événements</h2>
+          <h2>Mes événements</h2>
           <button id="openCreate" class="btn btn-primary" type="button">+ Nouvel événement</button>
         </div>
         <div id="eventGrid" class="event-grid" aria-live="polite"></div>
         <div id="eventsEmpty" class="empty" hidden>
           <div class="empty-icon">📸</div>
-          <h3>Aucun événement pour l'instant</h3>
-          <p>Sois le premier à en créer un !</p>
+          <h3>Tu n'as encore rejoint aucun événement</h3>
+          <p>Crée le tien, ou saisis un code ci-dessus pour en rejoindre un.</p>
         </div>
       </div>
     </section>
@@ -62,13 +78,19 @@
     <section id="eventView" class="view" hidden>
       <div class="event-banner">
         <div class="container">
-          <a href="#/" class="back">← Tous les événements</a>
+          <a href="#/" class="back">← Mes événements</a>
           <h1 id="evName"></h1>
           <p id="evDesc" class="ev-desc"></p>
+          <div class="code-box">
+            <span class="code-label">Code de l'événement</span>
+            <span id="evCode" class="code-value"></span>
+            <button id="copyCodeBtn" class="code-copy" type="button">Copier le code</button>
+          </div>
           <div class="ev-meta">
             <span id="evCreator" class="pill"></span>
             <span id="evCount" class="pill"></span>
-            <button id="shareBtn" class="pill pill-btn" type="button">🔗 Copier le lien</button>
+            <button id="shareBtn" class="pill pill-btn" type="button">🔗 Copier le lien d'invitation</button>
+            <button id="leaveBtn" class="pill pill-btn" type="button">Retirer de mes événements</button>
           </div>
         </div>
       </div>
@@ -95,8 +117,10 @@
         </form>
 
         <div class="section-head">
-          <h2>Galerie</h2>
+          <h2 id="galleryTitle">Galerie</h2>
+          <button id="albumBack" class="btn btn-ghost" type="button" hidden>← Toutes les photos</button>
         </div>
+        <div id="authorBar" class="author-bar" aria-label="Albums par personne" hidden></div>
         <div id="gallery" class="gallery" aria-live="polite"></div>
         <div id="galleryEmpty" class="empty" hidden>
           <div class="empty-icon">🖼️</div>
@@ -106,6 +130,7 @@
         <div id="notFound" class="empty" hidden>
           <div class="empty-icon">🔍</div>
           <h3>Événement introuvable</h3>
+          <p id="notFoundMsg">Code invalide.</p>
           <p><a href="#/" class="link">Retour à l'accueil</a></p>
         </div>
       </div>
